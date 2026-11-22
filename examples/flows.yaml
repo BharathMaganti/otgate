@@ -1,0 +1,34 @@
+# Flow spec: what each critical business flow must emit to be diagnosable.
+# Service and span names accept glob patterns (* and ?).
+
+threshold: 0.8            # release gate
+timeliness_seconds: 30    # full trace must be queryable within this many seconds
+weights:                  # normalized automatically
+  complete_traces: 0.4    # every expected span present, chain unbroken, correct parentage
+  span_detail: 0.4        # spans carry all required attributes
+  timeliness: 0.2         # trace visible in the backend in time
+
+flows:
+  - name: auto-quote
+    root: entry
+    # expected_transactions: 500   # or pass --expected auto-quote=500 from the load test
+    spans:
+      - id: entry
+        service: quote-api
+        name: "POST /quote"
+        required_attributes: [http.method, http.status_code, quote.id]
+      - id: pricing
+        service: pricing-svc
+        name: price.calculate
+        parent: entry
+        required_attributes: [quote.id, product.line]
+      - id: rating-db
+        service: rating-db
+        name: "SELECT *"
+        parent: pricing
+        required_attributes: [db.system, db.statement]
+      - id: inference
+        service: risk-model
+        name: risk.inference
+        parent: pricing
+        required_attributes: [model.version, quote.id]
