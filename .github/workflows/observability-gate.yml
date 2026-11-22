@@ -1,0 +1,38 @@
+name: observability-gate
+
+on:
+  workflow_dispatch:
+  pull_request:
+
+jobs:
+  observability-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install .
+
+      # Replace these two steps with: deploy to the perf environment, start
+      # `otgate collect` in the background, run the load test (JMeter/Locust/k6).
+      - name: Capture traces (demo data)
+        run: otgate demo --transactions 500 --out traces.json
+
+      - name: Score telemetry and gate release
+        run: |
+          otgate score --spec examples/flows.yaml --traces traces.json \
+            --expected auto-quote=500 \
+            --report-md blind-spots.md --report-json visibility.json
+
+      - name: Publish blind-spot report
+        if: always()
+        run: cat blind-spots.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: observability-report
+          path: |
+            blind-spots.md
+            visibility.json
